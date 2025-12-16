@@ -1,145 +1,104 @@
 require('dotenv').config();
-'user strict';
+'use strict';
+
+// 1. Imports
+const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const express = require('express'),
-    //morgan = require('morgan'),
-    config = require('./config'),
-    router = require('./router'),
-    bodyParser = require('body-parser'),
-    db = require('./orm')
+const config = require('./config');
+const router = require('./router');
+const bodyParser = require('body-parser');
+const db = require('./orm');
+const sjs = require('sequelize-json-schema');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const expressJSDocSwagger = require('express-jsdoc-swagger');
+const expressNunjucks = require('express-nunjucks');
+// const formidableMiddleware = require('express-formidable'); // Commented out to prevent conflict with body-parser/multer
 
-// 1. Security Headers (Helmet)
-app.use(helmet());
+// 2. Initialize App (Must be BEFORE using middleware)
+const app = express();
+const PORT = config.PORT;
 
-// 2. Rate Limiting (Prevent Brute Force & DoS)
+// 3. Security Headers (Helmet) - Fixes Missing Headers
+app.use(helmet({
+    contentSecurityPolicy: false, // Disabled temporarily to allow external scripts (like buttons.js)
+}));
+
+// 4. Rate Limiting (Prevent Brute Force & DoS)
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100, // Limit each IP to 100 requests per windowMs
     message: "Too many requests from this IP, please try again later."
 });
-
-// Apply to all requests
 app.use(limiter);
-    
-    
-    
-const sjs = require('sequelize-json-schema');
 
-
-const app = express()
-const PORT = config.PORT;
-//OPTIONAL: Security headers?????
-// app.use((req, res, next) => {
-//     res.header('Content-Type', 'application/json');
-//     res.header("Access-Control-Allow-Origin", "*");
-//     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE");
-//     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-//     next();
-//   });
-
-//OPTIONAL: Activate Logging
-// app.use(morgan('combined'));
+// 5. Body Parsers
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true })); // Added to handle form data correctly
 
+// 6. Session Configuration (Semgrep Fixes)
+// Fix: Use Environment Variable or strong fallback, Enable httpOnly
+const sessionSecret = process.env.SESSION_SECRET || 'long_random_secure_string_for_dev_only';
 
-//session middleware
-var cookieParser = require('cookie-parser');
-
-var session = require('express-session');
-const SessionCookie =  {
-  secure: false,
-  httpOnly: false,
-  sameSite: "lax",
-  maxAge: 1000 * 60 * 60 * 60 * 24 * 2//2 day
-} 
 app.use(session({
-  genid:function(req){
-    if ( (req.session) && (req.session.uid) ) {
-      return req.session.uid + "_" + 123;
-      //    return new Date().getTime().toString();
-
-    } else {
-      return new Date().getTime().toString();
+    name: 'sessionId',
+    secret: sessionSecret, // Fix: No hardcoded 'SuperSecret'
+    resave: false,
+    saveUninitialized: false, // Fix: Recommended for login sessions
+    cookie: {
+        httpOnly: true, // Fix: Mitigates XSS (Semgrep Requirement)
+        secure: false,  // Set to TRUE if using HTTPS (Keep false for localhost)
+        maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
+        sameSite: 'lax' // CSRF Protection helper
     }
-  },
-  //secret for production: 'H4rDC0Dead',
-  resave: false, //forces the session to be saved back to store
-  httpOnly: false,
-  name:'sessionID',
-  secret: 'SuperSecret',
-  secure:false,
-  saveUninitialized: true,
-  cookie: SessionCookie
-}))
+}));
+
 app.use(cookieParser());
 
-router(app, db);
+// 7. Static Files
+app.use(express.static('src/public'));
 
-//drop and resync with { force: true } normal with alter:true
-db.sequelize.sync({alter:true}).then(() => {
-    app.listen(PORT, () => {
-      console.log('Express listening on port:', PORT);
-    });
-  });
-
-const expressJSDocSwagger = require('express-jsdoc-swagger');
-
-const docOptions = {
-  info: {
-    version: '1.0.0',
-    title: 'Damn vulnerable app',
-    license: {
-      name: 'MIT',
-    },
-  },
-  security: {
-    BearerAuth: {
-      type: 'http',
-      scheme: 'bearer',
-    },
-  },
-  baseDir: __dirname,
-  // Glob pattern to find your jsdoc files (multiple patterns can be added in an array)
-  filesPattern: './../**/*.js',
-  // URL where SwaggerUI will be rendered
-  swaggerUIPath: '/api-docs',
-  // Expose OpenAPI UI
-  exposeSwaggerUI: true,
-  // Expose Open API JSON Docs documentation in `apiDocsPath` path.
-  exposeApiDocs: true,
-  // Open API JSON Docs endpoint.
-  apiDocsPath: '/v1/api-docs',
-  // Set non-required fields as nullable by default
-  notRequiredAsNullable: false,
-  // You can customize your UI options.
-  // you can extend swagger-ui-express config. You can checkout an example of this
-  // in the `example/configuration/swaggerOptions.js`
-  swaggerUiOptions: {},
-  // multiple option in case you want more that one instance
-  multiple: true,
-};
-
-  //const swaggerDocs = expressJSDocSwagger(swaggerOptions);
-
-expressJSDocSwagger(app)(docOptions);
-  //app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
-  
-  //generate schemas from sequelize
-  const options = {exclude: ['id', 'createdAt', 'updatedAt']};
-sjs.getSequelizeSchema(db.sequelize, options);
-
-const expressNunjucks = require('express-nunjucks');
+// 8. Template Engine (Nunjucks)
 app.set('views', __dirname + '/templates');
 const njk = expressNunjucks(app, {
-  watch: true,
-  noCache: true
+    watch: true,
+    noCache: true
 });
 
-//expose css, js
-app.use(express.static('src/public'))
+// 9. Routes
+router(app, db);
 
-//form handler
-const formidableMiddleware = require('express-formidable');
+// 10. Swagger Documentation
+const docOptions = {
+    info: {
+        version: '1.0.0',
+        title: 'Secure Node App',
+        license: { name: 'MIT' },
+    },
+    security: {
+        BearerAuth: { type: 'http', scheme: 'bearer' },
+    },
+    baseDir: __dirname,
+    filesPattern: './../**/*.js',
+    swaggerUIPath: '/api-docs',
+    exposeSwaggerUI: true,
+    exposeApiDocs: true,
+    apiDocsPath: '/v1/api-docs',
+    notRequiredAsNullable: false,
+    swaggerUiOptions: {},
+    multiple: true,
+};
+expressJSDocSwagger(app)(docOptions);
 
-app.use(formidableMiddleware());
+// Generate schemas from sequelize
+const options = { exclude: ['id', 'createdAt', 'updatedAt'] };
+sjs.getSequelizeSchema(db.sequelize, options);
+
+// 11. Start Server
+// drop and resync with { force: true } normal with alter:true
+db.sequelize.sync({ alter: true }).then(() => {
+    app.listen(PORT, () => {
+        console.log('Express listening on port:', PORT);
+    });
+});
