@@ -1,3 +1,4 @@
+require('dotenv').config();
 'user strict';
 
 const express = require('express'),

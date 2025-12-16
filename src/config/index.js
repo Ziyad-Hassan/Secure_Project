@@ -9,7 +9,7 @@ let db_path = path.join(__dirname+ "/../../db/", 'db.sqlite')
 
 const config = {
     PORT: process.env.APP_PORT || 5000,
-    jwtSecret: process.env.JWT_SECRET | "superSecretPassword",
+    jwtSecret: process.env.JWT_SECRET,
 
     //env variables
     DATABASE_USERNAME: process.env.DATABASE_USERNAME || null,
