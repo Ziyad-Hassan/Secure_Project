@@ -10,19 +10,42 @@ module.exports = (app, db) => {
         return false;
     };
 
+    // Helper: Validate Message Content (Allow only letters, numbers, spaces, and basic punctuation)
+    // Fix V1: Input Validation (Defense in Depth)
+    const sanitizeMessage = (msg) => {
+        if (!msg) return "Please log in to continue";
+        
+        // Regex: Allow a-z, A-Z, 0-9, space, and chars: . , ! ? ' -
+        // Reject everything else (like < > { } / \ etc.)
+        const safePattern = /^[a-zA-Z0-9\s.,!?'-]+$/;
+        
+        if (safePattern.test(msg)) {
+            return msg;
+        } else {
+            // If malicious chars detected, return generic error
+            return "Invalid characters detected in message!";
+        }
+    };
+
     //Front End entry page
     app.get('/', (req, res) => {
-        const message = req.query.message || "Please log in to continue";
+        // Fix V1: Input Validation + Sanitization
+        const rawMessage = req.query.message;
+        const safeMessage = sanitizeMessage(rawMessage);
+
         res.render('user.html', {
-            message: message
+            message: safeMessage
         });
     });
 
     //Front End register page
     app.get('/register', (req, res) => {
-        const message = req.query.message || "Please log in to continue";
+        // Fix V1: Input Validation + Sanitization
+        const rawMessage = req.query.message;
+        const safeMessage = sanitizeMessage(rawMessage);
+
         res.render('user-register.html', {
-            message: message
+            message: safeMessage
         });
     });
 
@@ -69,7 +92,7 @@ module.exports = (app, db) => {
         var userEmail = req.query.email;
         var userPassword = req.query.password;
         
-        // FIX CRASH: Handle missing input to prevent "WHERE parameter ... undefined" error
+        // FIX CRASH: Handle missing input
         if (!userEmail || !userPassword) {
             return res.redirect('/?message=Please enter both email and password');
         }
@@ -175,7 +198,8 @@ module.exports = (app, db) => {
                     }
                     
                     if (req.query.relationship) {
-                        love_message = req.query.relationship;
+                        // Sanitize relationship message too!
+                        love_message = sanitizeMessage(req.query.relationship);
                     }
 
                     res.render('beer.html', {
