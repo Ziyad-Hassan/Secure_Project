@@ -1,6 +1,7 @@
 require('dotenv').config();
 'user strict';
-
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const express = require('express'),
     //morgan = require('morgan'),
     config = require('./config'),
@@ -8,7 +9,18 @@ const express = require('express'),
     bodyParser = require('body-parser'),
     db = require('./orm')
 
+// 1. Security Headers (Helmet)
+app.use(helmet());
 
+// 2. Rate Limiting (Prevent Brute Force & DoS)
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: "Too many requests from this IP, please try again later."
+});
+
+// Apply to all requests
+app.use(limiter);
     
     
     
