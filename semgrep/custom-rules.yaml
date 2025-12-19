@@ -1,0 +1,46 @@
+rules:
+  - id: unprotected-admin-routes
+    message: "Admin route without authentication middleware"
+    severity: ERROR
+    languages: [javascript]
+    patterns:
+      - pattern: app.$METHOD("/v1/admin/...", $HANDLER)
+      - pattern-not: app.$METHOD("/v1/admin/...", authMiddleware, $HANDLER)
+
+  - id: unprotected-user-routes
+    message: "User route without authentication middleware"
+    severity: WARNING
+    languages: [javascript]
+    patterns:
+      - pattern: app.$METHOD("/v1/user/...", $HANDLER)
+      - pattern-not: app.$METHOD("/v1/user/...", authMiddleware, $HANDLER)
+
+  - id: ssrf-user-controlled-url
+    message: "Possible SSRF: user-controlled URL passed to server-side request"
+    severity: ERROR
+    languages: [javascript]
+    pattern-either:
+      - pattern: fetch(req.query.url)
+      - pattern: axios.get(req.query.url)
+      - pattern: request(req.query.url)
+
+  - id: unvalidated-file-upload
+    message: "File upload endpoint without validation logic"
+    severity: WARNING
+    languages: [javascript]
+    pattern: upload.single("file")
+
+  - id: idor-direct-object-reference
+    message: "Possible IDOR: direct object access via user-controlled ID"
+    severity: WARNING
+    languages: [javascript]
+    patterns:
+      - pattern: "req.query.id"
+      - pattern-not: "req.user.id"
+
+  - id: privilege-escalation-role-change
+    message: "Possible privilege escalation: role assignment detected"
+    severity: ERROR
+    languages: [javascript]
+    pattern: 'role: "admin"'
+                                           
